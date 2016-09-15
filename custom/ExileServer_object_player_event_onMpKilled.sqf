@@ -191,6 +191,9 @@ if !(_systemChat isEqualTo "") then
 _victimPosition = getPos _victim;
 format["insertPlayerHistory:%1:%2:%3:%4:%5", getPlayerUID _victim, name _victim, _victimPosition select 0, _victimPosition select 1, _victimPosition select 2] call ExileServer_system_database_query_fireAndForget;
 //death table
-format["insertDeath:%1:%2:%3:%4:%5:%6", getPlayerUID _victim, getPlayerUID _killer, _victimPosition select 0, _victimPosition select 1, _victimPosition select 2, _systemChat] call ExileServer_system_database_query_fireAndForget;
+if !(_killType = 1)
+{
+	format["insertDeath:%1:%2:%3:%4:%5:%6", getPlayerUID _victim, getPlayerUID _killer, _victimPosition select 0, _victimPosition select 1, _victimPosition select 2, _systemChat] call ExileServer_system_database_query_fireAndForget;
+};
 format["deletePlayer:%1", _victim getVariable ["ExileDatabaseId", -1]] call ExileServer_system_database_query_fireAndForget;
 true
