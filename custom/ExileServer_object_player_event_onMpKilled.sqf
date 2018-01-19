@@ -5,18 +5,18 @@
  * www.exilemod.com
  * © 2015 Exile Mod Team
  *
- * This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License. 
+ * This work is licensed under the Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License.
  * To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-nd/4.0/.
  */
- 
+
 private["_victim","_killer","_countDeath","_countKill","_killSummary","_killingPlayer","_killType","_oldVictimRespect","_newVictimRespect","_oldKillerRespect","_newKillerRespect","_systemChat","_modifyVictimRespect","_respectLoss","_perks","_minRespectTransfer","_respectTransfer","_perkNames","_killerStatsNeedUpdate","_newKillerFrags","_victimStatsNeedUpdate","_newVictimDeaths","_victimPosition"];
 _victim = _this select 0;
 _killer = _this select 1;
 if (!isServer || hasInterface || isNull _victim) exitWith {};
 _victim setVariable ["ExileDiedAt", time];
 if !(isPlayer _victim) exitWith {};
-_victim setVariable ["ExileIsDead", true]; 
-_victim setVariable ["ExileName", name _victim, true]; 
+_victim setVariable ["ExileIsDead", true];
+_victim setVariable ["ExileName", name _victim, true];
 _countDeath = false;
 _countKill = false;
 _killSummary = [];
@@ -25,51 +25,82 @@ _killType = [_victim, _killer, _killingPlayer] call ExileServer_util_getFragType
 _oldVictimRespect = _victim getVariable ["ExileScore", 0];
 _newVictimRespect = _oldVictimRespect;
 _oldKillerRespect = 0;
-if !(isNull _killingPlayer) then 
+if !(isNull _killingPlayer) then
 {
 	_oldKillerRespect = _killingPlayer getVariable ["ExileScore", 0];
 };
 _newKillerRespect = _oldKillerRespect;
-switch (_killType) do 
+switch (_killType) do
 {
-	default 
+	default
 	{
-		_countDeath = true;
+		_countDeath = false;
 		_systemChat = format ["%1 died for an unknown reason!", name _victim];
 		_newVictimRespect = _oldVictimRespect - round ((abs _oldVictimRespect) / 100 * (getNumber (configFile >> "CfgSettings" >> "Respect" >> "Percentages" >> "unlucky")));
 	};
 	case 1:
 	{
+		// Kuplion's Improved Kill Feed
+		private["_zombieKill"];
+		_victimPosition = position _victim;
+		_bystanders = _victimPosition nearEntities ['Man',5];
+		_zombieKill = false;
+		{
+			_zombieKill = getText(configFile >> 'CfgVehicles' >> typeOf _x >> 'author') isEqualTo 'Ryan';
+		} forEach _bystanders;
+		
+		if(_zombieKill) then
+		{
+		_countDeath = true;
+		_modifyVictimRespect = true;
+		_zombieDeath = selectRandom ["was killed", "was eaten"]; //Add more messages here to change the killed text
+		_systemChat = format ["%1 %2 by a zombie!", name _victim, _zombieDeath];
+		_newVictimRespect = _oldVictimRespect - round ((abs _oldVictimRespect) / 100 * (getNumber (configFile >> "CfgSettings" >> "Respect" >> "Percentages" >> "suicide")));
+		}
+		else
+		{
+		
 		_countDeath = true;
 		_modifyVictimRespect = true;
 		_systemChat = format ["%1 commited suicide!", name _victim];
 		_newVictimRespect = _oldVictimRespect - round ((abs _oldVictimRespect) / 100 * (getNumber (configFile >> "CfgSettings" >> "Respect" >> "Percentages" >> "suicide")));
+		};
+		// Kuplion's Improved Kill Feed
+		
+		/*
+		_countDeath = false;
+		_modifyVictimRespect = true;
+		_systemChat = format ["%1 commited suicide!", name _victim];
+		_newVictimRespect = _oldVictimRespect - round ((abs _oldVictimRespect) / 100 * (getNumber (configFile >> "CfgSettings" >> "Respect" >> "Percentages" >> "suicide")));
+		*/
 	};
 	case 2:
 	{
-		_countDeath = true;
+		_countDeath = false;
 		_countKill = false;
 		_systemChat = format ["%1 died while playing Russian Roulette!", name _victim];
-		_newVictimRespect = _oldVictimRespect; 
+		_newVictimRespect = _oldVictimRespect;
 		_victim call ExileServer_system_russianRoulette_event_onPlayerDied;
 	};
 	case 3:
 	{
-		_countDeath = true;
+		_countDeath = false;
 		_countKill = false;
 		_systemChat = format ["%1 crashed to death!", name _victim];
 		_newVictimRespect = _oldVictimRespect - round ((abs _oldVictimRespect) / 100 * (getNumber (configFile >> "CfgSettings" >> "Respect" >> "Percentages" >> "crash")));
 	};
 	case 4:
 	{
-		_countDeath = true;
+		private["_NPCKill"];
+		_countDeath = false;
 		_countKill = false;
 		_systemChat = format ["%1 was killed by an NPC!", name _victim];
+		_NPCKill = true;
 		_newVictimRespect = _oldVictimRespect - round ((abs _oldVictimRespect) / 100 * (getNumber (configFile >> "CfgSettings" >> "Respect" >> "Percentages" >> "npc")));
 	};
 	case 5:
 	{
-		_countDeath = false;
+		_countDeath = true;
 		_countKill = false;
 		_systemChat = format ["%1 was team-killed by %2!", name _victim, name _killingPlayer];
 		_respectLoss = round ((abs _oldKillerRespect) / 100 * (getNumber (configFile >> "CfgSettings" >> "Respect" >> "Percentages" >> "friendyFire")));
@@ -85,45 +116,73 @@ switch (_killType) do
 		_newKillerRespect = _oldKillerRespect - _respectLoss;
 		_killSummary pushBack ["BAMBI SLAYER", -1 * _respectLoss];
 	};
-	case 7:
-	{
-		_countDeath = true;
-		_countKill = true;
-		_perks = [_victim, _killer, _killingPlayer] call ExileServer_util_getFragPerks;
-		_minRespectTransfer = getNumber (configFile >> "CfgSettings" >> "Respect" >> "minRespectTransfer");
-		_respectTransfer = round ((abs _oldVictimRespect) / 100 * (getNumber (configFile >> "CfgSettings" >> "Respect" >> "Percentages" >> "frag")));
-		if (_respectTransfer < _minRespectTransfer) then
+	 case 7:
+    {
+		private["_weapon","_weaponDisplayName","_weaponScope","_weaponScopeDisplayName","_locationNames","_victimNear","_vehicle"];
+        _countDeath = true;
+        _countKill = true;
+        _perks = [_victim, _killer, _killingPlayer] call ExileServer_util_getFragPerks;
+        _minRespectTransfer = getNumber (configFile >> "CfgSettings" >> "Respect" >> "minRespectTransfer");
+        _respectTransfer = round ((abs _oldVictimRespect) / 100 * (getNumber (configFile >> "CfgSettings" >> "Respect" >> "Percentages" >> "frag")));
+		
+		// Kuplion's Improved Kill Feed
+		_locationNames = nearestLocations [getPos _victim, ["NameVillage","NameCity","NameCityCapital"], 2000];
+		_victimNear = text (_locationNames select 0);
+		_weapon = currentWeapon _killer;
+		if !((vehicle _killer) isEqualTo _killer) then
 		{
-			_respectTransfer = _minRespectTransfer;
+			_weapon = currentWeapon (gunner (vehicle _killer));
 		};
-		_newVictimRespect = _oldVictimRespect - _respectTransfer;
-		_newKillerRespect = _oldKillerRespect + _respectTransfer;
-		_killSummary pushBack ["ENEMY FRAGGED", _respectTransfer];
-		if (_perks isEqualTo []) then 
+		
+		_weaponDisplayName = getText (configfile >> "CfgWeapons" >> _weapon >> "displayName");
+        _weaponScope = ""; 
+		_weaponScopeDisplayName = "Iron Sights";
+		if ((vehicle _killer) isEqualTo _killer) then
 		{
-			_systemChat = format ["%1 was killed by %2!", name _victim, name _killingPlayer];
-		}
-		else 
-		{
-			_perkNames = [];
+			_weaponScope = (_killer weaponAccessories (currentWeapon _killer)) select 2;
+			if !(_weaponScope isEqualTo "") then
 			{
-				_perkNames pushBack (_x select 0);
-				_killSummary pushBack _x;
-				_newKillerRespect = _newKillerRespect + (_x select 1);
-			} 
-			forEach _perks;
-			_systemChat = format ["%1 was killed by %2! (%3)", name _victim, name _killingPlayer, _perkNames joinString ", "];
+				_weaponScopeDisplayName = getText (configfile >> "CfgWeapons" >> _weaponScope >> "displayName"); 
+			};
 		};
-	};
+		// Kuplion's Improved Kill Feed
+		
+		
+		
+		
+        if (_respectTransfer < _minRespectTransfer) then
+        {
+            _respectTransfer = _minRespectTransfer;
+        };
+        _newVictimRespect = _oldVictimRespect - _respectTransfer;
+        _newKillerRespect = _oldKillerRespect + _respectTransfer;
+        _killSummary pushBack ["ENEMY FRAGGED", _respectTransfer];
+        if (_perks isEqualTo []) then 
+        {
+            _systemChat = format ["%1 was killed by %2!", name _victim, name _killingPlayer];
+        }
+        else 
+        {
+            _perkNames = [];
+            {
+                _perkNames pushBack (_x select 0);
+                _killSummary pushBack _x;
+                _newKillerRespect = _newKillerRespect + (_x select 1);
+            } 
+            forEach _perks;
+            _systemChat = format ["%1 was killed by %2! (%3)", name _victim, name _killingPlayer, _perkNames joinString ", "];
+        };
+    };
+	
 };
-if !(isNull _killingPlayer) then 
+if !(isNull _killingPlayer) then
 {
-	if !(_killSummary isEqualTo []) then 
-	{	
+	if !(_killSummary isEqualTo []) then
+	{
 		[_killingPlayer, "showFragRequest", [_killSummary]] call ExileServer_system_network_send_to;
 	};
 };
-if !(isNull _killingPlayer) then 
+if !(isNull _killingPlayer) then
 {
 	_killerStatsNeedUpdate = false;
 	if (_countKill) then
@@ -134,13 +193,13 @@ if !(isNull _killingPlayer) then
 		_killingPlayer setVariable ["ExileKills", _newKillerFrags];
 		format["addAccountKill:%1", getPlayerUID _killingPlayer] call ExileServer_system_database_query_fireAndForget;
 	};
-	if !(_newKillerRespect isEqualTo _oldKillerRespect) then 
+	if !(_newKillerRespect isEqualTo _oldKillerRespect) then
 	{
 		_killingPlayer setVariable ["ExileScore", _newKillerRespect];
 		_killerStatsNeedUpdate = true;
 		format["setAccountScore:%1:%2", _newKillerRespect, getPlayerUID _killingPlayer] call ExileServer_system_database_query_fireAndForget;
 	};
-	if (_killerStatsNeedUpdate) then 
+	if (_killerStatsNeedUpdate) then
 	{
 		_killingPlayer call ExileServer_object_player_sendStatsUpdate;
 	};
@@ -154,34 +213,34 @@ if (_countDeath) then
 	_victimStatsNeedUpdate = true;
 	format["addAccountDeath:%1", getPlayerUID _victim] call ExileServer_system_database_query_fireAndForget;
 };
-if !(_newVictimRespect isEqualTo _oldVictimRespect) then 
+if !(_newVictimRespect isEqualTo _oldVictimRespect) then
 {
 	_victim setVariable ["ExileScore", _newVictimRespect];
 	_victimStatsNeedUpdate = true;
 	format["setAccountScore:%1:%2", _newVictimRespect, getPlayerUID _victim] call ExileServer_system_database_query_fireAndForget;
 };
-if (_victimStatsNeedUpdate) then 
+if (_victimStatsNeedUpdate) then
 {
 	_victim call ExileServer_object_player_sendStatsUpdate;
 };
-if ((vehicle _victim) isEqualTo _victim) then 
+if ((vehicle _victim) isEqualTo _victim) then
 {
-	if !(underwater _victim) then 
+	if !(underwater _victim) then
 	{
-		if !(_victim call ExileClient_util_world_isInTraderZone) then 
+		if !(_victim call ExileClient_util_world_isInTraderZone) then
 		{
 			_victim call ExileServer_object_flies_spawn;
 		};
 	};
 };
-if !(_systemChat isEqualTo "") then 
+if !(_systemChat isEqualTo "") then
 {
-	if ((getNumber (configFile >> "CfgSettings" >> "KillFeed" >> "showKillFeed")) isEqualTo 1) then 
+	if ((getNumber (configFile >> "CfgSettings" >> "KillFeed" >> "showKillFeed")) isEqualTo 1) then
 	{
 		["systemChatRequest", [_systemChat]] call ExileServer_system_network_send_broadcast;
 	};
 };
-if !(_systemChat isEqualTo "") then 
+if !(_systemChat isEqualTo "") then
 {
 	if ((getNumber (configFile >> "CfgSettings" >> "Logging" >> "deathLogging")) isEqualTo 1) then
 	{
@@ -189,11 +248,18 @@ if !(_systemChat isEqualTo "") then
 	};
 };
 _victimPosition = getPos _victim;
-format["insertPlayerHistory:%1:%2:%3:%4:%5", getPlayerUID _victim, name _victim, _victimPosition select 0, _victimPosition select 1, _victimPosition select 2] call ExileServer_system_database_query_fireAndForget;
+_killerPosition = getPos _killer;
+//format["insertPlayerHistory:%1:%2:%3:%4:%5", getPlayerUID _victim, name _victim, _victimPosition select 0, _victimPosition select 1, _victimPosition select 2] call ExileServer_system_database_query_fireAndForget;
+
 //death table
-if !(_killType = 1)
-{
-	format["insertDeath:%1:%2:%3:%4:%5:%6", getPlayerUID _victim, getPlayerUID _killer, _victimPosition select 0, _victimPosition select 1, _victimPosition select 2, _systemChat] call ExileServer_system_database_query_fireAndForget;
-};
+if!(_NPCKill)
+ {
+	format["insertDeath:%1:%2:%3:%4:%5:%6:%7:%8:%9:%10:%11", getPlayerUID _victim, getPlayerUID _killer, _victimPosition select 0, _victimPosition select 1, _victimPosition select 2,_weaponDisplayName + "_"+ _weaponScopeDisplayName, _victimNear, _killerPosition select 0, _killerPosition select 1, _killerPosition select 2,  _systemChat] call ExileServer_system_database_query_fireAndForget;
+ }
+ else
+ {
+	format["insertDeath:%1:NPC:%2:%3:%4:%5:%6:%7:%8:%9:%10", getPlayerUID _victim, _victimPosition select 0, _victimPosition select 1, _victimPosition select 2,_weaponDisplayName + "_"+ _weaponScopeDisplayName, _victimNear, _killerPosition select 0, _killerPosition select 1, _killerPosition select 2,  _systemChat] call ExileServer_system_database_query_fireAndForget;
+ }
+
 format["deletePlayer:%1", _victim getVariable ["ExileDatabaseId", -1]] call ExileServer_system_database_query_fireAndForget;
 true
